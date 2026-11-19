@@ -9410,7 +9410,111 @@ function drawCdCities(){
     `</button>`;
   }).join('');
 }
-function renderCctvDrawer(){
+const CD_SNAP_CONC = 4;
+let cdPageLimit = 24, cdTotalVisible = 0, cdVio = null, cdSnapActive = 0;
+const cdVisSet = new Set();
+
+function cdClearObservers(){
+  if (cdVio) { try { cdVio.disconnect(); } catch (e) {} }
+  cdVisSet.clear();
+  cdSnapActive = 0;
+}
+
+function cdSetBadge(cell, cls, text){
+  const b = cell && cell.querySelector('.badge');
+  if (!b) return;
+  b.className = 'badge ' + cls;
+  b.textContent = text;
+}
+
+function cdLoadSnap(cell){
+  const idx = parseInt(cell.dataset.cdi, 10);
+  const c = Number.isFinite(idx) ? cdList[idx] : null;
+  const im = cell.querySelector('img.snap');
+  if (!c || !im || cell.dataset.cdLoaded === '1' || cell.dataset.cdLoading === '1') return false;
+  if (c.e && !c.snap) {
+    cdSetBadge(cell, 'live', 'YouTube');
+    cell.dataset.cdLoaded = '1';
+    return false;
+  }
+  const directSnap = Boolean(c.snap && (/^https?:\/\/i\.ytimg\.com\//i.test(c.snap) || /(^|\.)dsdajakarta\.id/i.test(c.snap) || /SourceEndpoint\.video/i.test(c.snap)));
+  const canSnap = Boolean(c.snap || (camSnapOK && API != null && !c.e));
+  if (!canSnap) {
+    cdSetBadge(cell, 'wait', 'Siaga');
+    return false;
+  }
+  const useProxy = cell.dataset.cdProxy === '1';
+  const url = snapUrlFor(c, useProxy);
+  if (!url) return false;
+  cell.dataset.cdLoading = '1';
+  if (!directSnap) cdSnapActive++;
+  const done = (ok) => {
+    cell.dataset.cdLoading = '0';
+    if (!directSnap && cdSnapActive > 0) cdSnapActive--;
+    if (ok) {
+      cell.dataset.cdLoaded = '1';
+      cdSetBadge(cell, 'live', c.e ? 'YouTube' : 'Snapshot');
+      cdPumpSnaps();
+      return;
+    }
+    const tries = (parseInt(cell.dataset.cdTries || '0', 10)) + 1;
+    cell.dataset.cdTries = String(tries);
+    if (!useProxy && c.snap && API != null) {
+      cell.dataset.cdProxy = '1';
+      setTimeout(() => { if (cdOpen && cdVisSet.has(cell)) cdPumpSnaps(); }, 300);
+    } else if (tries <= 3) {
+      cdSetBadge(cell, 'buf', 'Ulang…');
+      setTimeout(() => { if (cdOpen && cdVisSet.has(cell)) cdPumpSnaps(); }, 3000 * tries);
+    } else {
+      cdSetBadge(cell, 'wait', 'Siaga');
+    }
+    cdPumpSnaps();
+  };
+  im.onload = () => done(true);
+  im.onerror = () => done(false);
+  im.src = url;
+  return true;
+}
+
+function cdPumpSnaps(){
+  if (!cdOpen || document.hidden) return;
+  for (const cell of cdVisSet) {
+    if (!cell.isConnected) { cdVisSet.delete(cell); continue; }
+    if (cell.dataset.cdLoaded === '1' || cell.dataset.cdLoading === '1') continue;
+    const idx = parseInt(cell.dataset.cdi, 10);
+    const c = Number.isFinite(idx) ? cdList[idx] : null;
+    if (!c || cell.classList.contains('is-offline')) continue;
+    const isDirectYt = Boolean(c.snap && /^https?:\/\/i\.ytimg\.com\//i.test(c.snap));
+    if (!isDirectYt && cdSnapActive >= CD_SNAP_CONC) continue;
+    cdLoadSnap(cell);
+  }
+}
+
+function cdInitVio(){
+  if (cdVio) { try { cdVio.disconnect(); } catch (e) {} }
+  const root = $('#cd-body');
+  if (!('IntersectionObserver' in window) || !root) return;
+  cdVio = new IntersectionObserver(entries => {
+    for (const ent of entries) {
+      if (ent.isIntersecting) cdVisSet.add(ent.target);
+      else cdVisSet.delete(ent.target);
+    }
+    cdPumpSnaps();
+  }, { root, rootMargin: '160px 0px', threshold: 0.01 });
+}
+
+function cdCardHtml(c, isOff, idx){
+  const badgeHtml = isOff
+    ? '<span class="badge off">Offline</span>'
+    : '<span class="badge wait">Memuat</span>';
+  const imgHtml = isOff ? '' : '<img class="snap" alt="" decoding="async">';
+  return `<div class="cam${isOff ? ' is-offline' : ''}" data-cdi="${idx}" role="button" tabindex="0" aria-label="${esc(c.n)}">
+    <div class="frame">${imgHtml}${badgeHtml}</div>
+    <div class="cap"><span>${esc(c.n)}</span><span class="cd-city">${esc(c.c || c.sub || '')}</span></div>
+  </div>`;
+}
+
+function renderCctvDrawer(appendMore = false){
   const grid = $('#cd-grid');
   if (!grid || !cdOpen) return;
   const qEl = $('#cd-q');
@@ -9429,7 +9533,10 @@ function renderCctvDrawer(){
     if (isOff) offCount++;
     if (!isOff || cdShowOff) visible.push({ c, isOff });
   }
-  cdList = visible.map(x => x.c);
+  cdTotalVisible = visible.length;
+  const pageVisible = q ? visible : visible.slice(0, cdPageLimit);
+  const prevLen = appendMore ? cdList.length : 0;
+  cdList = pageVisible.map(x => x.c);
   const tog = $('#cd-off-tog');
   if (tog) {
     tog.hidden = offCount === 0 && !cdShowOff;
@@ -9438,24 +9545,31 @@ function renderCctvDrawer(){
     if (sp) sp.textContent = String(offCount);
   }
   grid.classList.toggle('show-offline', cdShowOff);
-  if (!visible.length) {
+  if (!pageVisible.length) {
+    cdClearObservers();
     grid.innerHTML = '<div class="cd-empty">Tidak ada kamera yang cocok dengan filter saat ini.</div>';
+  } else if (appendMore && prevLen > 0 && prevLen < pageVisible.length) {
+    const frag = document.createDocumentFragment(), tpl = document.createElement('div');
+    for (let idx = prevLen; idx < pageVisible.length; idx++) {
+      const { c, isOff } = pageVisible[idx];
+      tpl.innerHTML = cdCardHtml(c, isOff, idx);
+      const el = tpl.firstElementChild;
+      if (cdVio) cdVio.observe(el);
+      frag.appendChild(el);
+    }
+    grid.appendChild(frag);
+    cdPumpSnaps();
   } else {
-    grid.innerHTML = visible.map(({ c, isOff }, idx) => {
-      const snapSrc = c.snap ? c.snap : ((camSnapOK && API != null && !c.e) ? tokQ(API + '/api/cctv/snap?u=' + encodeURIComponent(c.s)) : '');
-      const badgeHtml = isOff
-        ? '<span class="badge off">Offline</span>'
-        : '<span class="badge live">Live</span>';
-      const imgHtml = snapSrc ? `<img class="snap" src="${escUrl(snapSrc)}" alt="" loading="lazy" onerror="this.remove()">` : '';
-      return `<div class="cam${isOff ? ' is-offline' : ''}" data-cdi="${idx}" role="button" tabindex="0" aria-label="${esc(c.n)}">
-        <div class="frame">${imgHtml}${badgeHtml}</div>
-        <div class="cap"><span>${esc(c.n)}</span><span class="cd-city">${esc(c.c || c.sub || '')}</span></div>
-      </div>`;
-    }).join('');
+    cdClearObservers();
+    cdInitVio();
+    grid.innerHTML = pageVisible.map(({ c, isOff }, idx) => cdCardHtml(c, isOff, idx)).join('');
+    if (cdVio) grid.querySelectorAll('.cam').forEach(el => cdVio.observe(el));
+    else grid.querySelectorAll('.cam').forEach(el => { cdVisSet.add(el); });
+    cdPumpSnaps();
   }
   const onlineCount = base.length - offCount;
   if ($('#cd-meta')) $('#cd-meta').textContent = `${onlineCount}/${base.length} online`;
-  if ($('#cd-stat')) $('#cd-stat').textContent = `kamera: ${visible.length} tampil · ${onlineCount} aktif`;
+  if ($('#cd-stat')) $('#cd-stat').textContent = `kamera: ${pageVisible.length}/${cdTotalVisible} tampil · ${onlineCount} aktif`;
   if ($('#cd-city-stat')) $('#cd-city-stat').textContent = `Wilayah: ${cdCity}`;
 }
 function openCctvDrawer(){
@@ -9466,6 +9580,7 @@ function openCctvDrawer(){
   const wrap = $('#cctvdrawer');
   if (!wrap) return;
   cdOpen = true;
+  cdPageLimit = 24;
   drawCdCities();
   wrap.classList.add('on');
   wrap.inert = false;
@@ -9477,6 +9592,7 @@ function openCctvDrawer(){
 function closeCctvDrawer(silent){
   if (!cdOpen) return;
   cdOpen = false;
+  cdClearObservers();
   const wrap = $('#cctvdrawer');
   if (wrap) {
     wrap.classList.remove('on');
@@ -9489,6 +9605,15 @@ function closeCctvDrawer(silent){
   }
 }
 addEventListener('resize', () => { if (cdOpen) sizeCctvDrawer(); });
+if ($('#cd-body')) $('#cd-body').addEventListener('scroll', () => {
+  if (!cdOpen) return;
+  const b = $('#cd-body');
+  if (b.scrollTop + b.clientHeight >= b.scrollHeight - 300 && cdList.length < cdTotalVisible) {
+    cdPageLimit += 24;
+    renderCctvDrawer(true);
+  }
+  cdPumpSnaps();
+}, { passive: true });
 if ($('#btn-cctv')) $('#btn-cctv').addEventListener('click', () => {
   if (cdOpen) closeCctvDrawer();
   else openCctvDrawer();
@@ -9498,12 +9623,14 @@ if ($('#cd-cities')) $('#cd-cities').addEventListener('click', e => {
   const b = e.target.closest('.cb');
   if (!b) return;
   cdCity = b.dataset.city;
+  cdPageLimit = 24;
   drawCdCities();
   renderCctvDrawer();
 });
-if ($('#cd-q')) $('#cd-q').addEventListener('input', debounce(renderCctvDrawer, 160));
+if ($('#cd-q')) $('#cd-q').addEventListener('input', debounce(() => { cdPageLimit = 24; renderCctvDrawer(); }, 160));
 if ($('#cd-off-tog')) $('#cd-off-tog').addEventListener('click', () => {
   cdShowOff = !cdShowOff;
+  cdPageLimit = 24;
   renderCctvDrawer();
 });
 if ($('#cd-refresh')) $('#cd-refresh').addEventListener('click', () => {
