@@ -18,6 +18,10 @@
         const src = u.searchParams.get('src'); if (src) return 'kt:' + src.toLowerCase();
       }
       if (/(^|\.)molecool\.id$/i.test(u.hostname)) return 'mc:' + (u.pathname.split('/').filter(Boolean)[0] || '').toLowerCase();
+      if (/(^|\.)youtube\.com$/i.test(u.hostname)) {
+        const v = u.searchParams.get('v');
+        if (v) return 'yt:' + v;
+      }
       const qId = u.searchParams.get('src') || u.searchParams.get('id') || u.searchParams.get('stream');
       const dir = u.pathname.replace(/\/(index|mono|playlist|master)\.m3u8$/i, '').replace(/\/tracks-v\d+\/[^/]*$/i, '');
       return (u.host + dir + (qId ? '?' + qId : '')).toLowerCase();

@@ -893,5 +893,13 @@ test('youtube cctv catalog: extracts only LIVE streams, filters out VOD recordin
   assert.equal(cams[0].snap, 'https://i.ytimg.com/vi/LIVE1234567/hqdefault.jpg');
   assert.equal(cams[0].c, 'Gunungkidul');
   assert.equal(cams[0].src, 'youtube');
+
+  const CctvCore = require('../public/cctv-core');
+  const deduped = CctvCore.dedupe([
+    { n: 'Cam A', s: 'https://www.youtube.com/watch?v=LIVE1234567' },
+    { n: 'Cam B', s: 'https://www.youtube.com/watch?v=LIVE7654321' },
+    { n: 'Cam A dup', s: 'https://www.youtube.com/watch?v=LIVE1234567' },
+  ]);
+  assert.equal(deduped.length, 2, 'Distinct YouTube video IDs must not be collapsed by CctvCore.dedupe');
 });
 
