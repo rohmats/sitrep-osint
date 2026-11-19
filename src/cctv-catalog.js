@@ -566,7 +566,7 @@ function normalizeYoutubeStreamsUrl(raw) {
 
 function cleanYoutubeCamTitle(raw) {
   let s = String(raw || '').replace(/\s+/g, ' ').trim();
-  s = s.replace(/^(?:🔴\s*)?(?:live\s+streaming|live\s+cctv|streaming\s+cctv|cctv\s+live|cctv)\s*[-:|–—]*\s*/i, '');
+  s = s.replace(/^(?:🔴\s*)?(?:live\s+streaming|live\s+pemantauan\s+cctv|pemantauan\s+cctv|live\s+cctv|streaming\s+cctv|cctv\s+live|cctv)\s*[-:|–—]*\s*/i, '');
   s = s.replace(/\s*[-:|–—]\s*(?:dishub|kominfo|diskominfo)\b.*$/i, '');
   return (s || String(raw || '').trim()).slice(0, 96);
 }
@@ -623,11 +623,44 @@ function isYoutubeVideoLive(vr) {
   return hasLiveOverlay || hasLiveBadge;
 }
 
+function isYoutubeLockupLive(lu) {
+  if (!lu || typeof lu !== 'object') return false;
+  const overlays = lu.contentImage && lu.contentImage.thumbnailViewModel && Array.isArray(lu.contentImage.thumbnailViewModel.overlays)
+    ? lu.contentImage.thumbnailViewModel.overlays : [];
+  for (const ov of overlays) {
+    const bot = ov && ov.thumbnailBottomOverlayViewModel;
+    const badges = bot && Array.isArray(bot.badges) ? bot.badges : [];
+    for (const b of badges) {
+      const tb = b && b.thumbnailBadgeViewModel;
+      if (!tb) continue;
+      if (tb.badgeStyle === 'THUMBNAIL_OVERLAY_BADGE_STYLE_LIVE' || /^LIVE$/i.test(String(tb.text || '').trim())) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function extractYoutubeLiveStreams(html, city) {
   const data = extractYoutubeInitialData(html);
   if (!data) return [];
   const out = [];
   const seen = new Set();
+  const pushCam = (vid, rawTitle) => {
+    if (!/^[A-Za-z0-9_-]{11}$/.test(vid) || seen.has(vid)) return;
+    seen.add(vid);
+    const name = cleanYoutubeCamTitle(rawTitle) || `CCTV ${city} (${vid})`;
+    out.push({
+      n: name,
+      s: `https://www.youtube.com/watch?v=${vid}`,
+      e: `https://www.youtube.com/embed/${vid}?autoplay=1&mute=1`,
+      snap: `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
+      la: null,
+      lo: null,
+      c: city,
+      src: 'youtube',
+    });
+  };
   const walk = node => {
     if (!node || typeof node !== 'object') return;
     if (Array.isArray(node)) {
@@ -637,24 +670,21 @@ function extractYoutubeLiveStreams(html, city) {
     if (node.videoRenderer && typeof node.videoRenderer === 'object') {
       const vr = node.videoRenderer;
       const vid = String(vr.videoId || '').trim();
-      if (/^[A-Za-z0-9_-]{11}$/.test(vid) && !seen.has(vid) && isYoutubeVideoLive(vr)) {
-        seen.add(vid);
+      if (isYoutubeVideoLive(vr)) {
         const rawTitle = (vr.title && (vr.title.simpleText || (Array.isArray(vr.title.runs) ? vr.title.runs.map(r => r.text || '').join('') : ''))) || '';
-        const name = cleanYoutubeCamTitle(rawTitle) || `CCTV ${city} (${vid})`;
-        out.push({
-          n: name,
-          s: `https://www.youtube.com/watch?v=${vid}`,
-          e: `https://www.youtube.com/embed/${vid}?autoplay=1&mute=1`,
-          snap: `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
-          la: null,
-          lo: null,
-          c: city,
-          src: 'youtube',
-        });
+        pushCam(vid, rawTitle);
+      }
+    }
+    if (node.lockupViewModel && typeof node.lockupViewModel === 'object') {
+      const lu = node.lockupViewModel;
+      const vid = String(lu.contentId || '').trim();
+      if (isYoutubeLockupLive(lu)) {
+        const rawTitle = (lu.metadata && lu.metadata.lockupMetadataViewModel && lu.metadata.lockupMetadataViewModel.title && lu.metadata.lockupMetadataViewModel.title.content) || '';
+        pushCam(vid, rawTitle);
       }
     }
     for (const k of Object.keys(node)) {
-      if (k !== 'videoRenderer') walk(node[k]);
+      if (k !== 'videoRenderer' && k !== 'lockupViewModel') walk(node[k]);
     }
   };
   walk(data);

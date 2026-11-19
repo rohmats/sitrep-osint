@@ -9397,11 +9397,16 @@ function renderCctvDrawer(){
   const qEl = $('#cd-q');
   const q = ((qEl && qEl.value) || '').toLowerCase().replace(/[·|]+/g, ' ').trim();
   const base = CAMS.filter(c => c._hide !== true && camInDistrict(c, cdCity) && (!q || ((c.n || '') + ' ' + (c.c || '') + ' ' + (c.sub || '') + ' ' + (c.tags || '')).toLowerCase().replace(/[·|]+/g, ' ').includes(q)));
-  const aliveSet = aliveMap ? new Set(aliveMap) : null;
+  const aliveByUrl = new Map();
+  if (Array.isArray(aliveMap)) {
+    for (let i = 0; i < CAMS.length; i++) {
+      if (CAMS[i] && CAMS[i].s) aliveByUrl.set(CAMS[i].s, aliveMap[i]);
+    }
+  }
   let offCount = 0;
   const visible = [];
   for (const c of base) {
-    const isOff = Boolean(c._srvOff || (aliveSet && !aliveSet.has(c.s)));
+    const isOff = Boolean(c._srvOff || aliveByUrl.get(c.s) === false);
     if (isOff) offCount++;
     if (!isOff || cdShowOff) visible.push({ c, isOff });
   }
