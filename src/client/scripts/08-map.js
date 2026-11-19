@@ -1178,6 +1178,8 @@ function hydrateMapLayers(){
   pullDisaster();
 }
 function openMap(){
+  if (typeof closeTvDrawer === 'function') closeTvDrawer(true);
+  if (typeof closeCctvDrawer === 'function') closeCctvDrawer(true);
   sizeMap();
   const wrap = $('#mapwrap');
   wrap.classList.add('on');

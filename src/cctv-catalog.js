@@ -96,9 +96,9 @@ function createCctvCatalog({
   const CCTV_HIST_FILE = (fs && path && HIST_DIR) ? path.join(HIST_DIR, 'cctv-history.json') : '';
   let lastGoodCams = [];
   let cctvHistDirty = false, cctvHistSaveAt = 0, cctvHistInflight = false;
-  const srcCams = { bpjt: [], bekasi: [], jogja: [], molecool: [], tangkab: [], bali: [] };
-  const srcDone = { bpjt: false, bekasi: false, jogja: false, molecool: false, tangkab: false, bali: false };
-  const srcInflight = { bpjt: null, bekasi: null, jogja: null, molecool: null, tangkab: null, bali: null };
+  const srcCams = { bpjt: [], bekasi: [], jogja: [], molecool: [], tangkab: [], bali: [], youtube: [] };
+  const srcDone = { bpjt: false, bekasi: false, jogja: false, molecool: false, tangkab: false, bali: false, youtube: false };
+  const srcInflight = { bpjt: null, bekasi: null, jogja: null, molecool: null, tangkab: null, bali: null, youtube: null };
   const cctvProbe = { alive: new Set(), done: new Set(), running: false, last: 0 };
   const hostCors = new Map();
 
@@ -387,6 +387,43 @@ function createCctvCatalog({
     }));
     return out;
   }, v => Array.isArray(v) && v.length > 0));
+  const DEFAULT_YT_CHANNELS = [
+    { url: 'https://www.youtube.com/@cctvpacitankab/streams', city: 'Pacitan' },
+    { url: 'https://www.youtube.com/@KominfoGunungkidul/streams', city: 'Gunungkidul' },
+    { url: 'https://www.youtube.com/@CCTVDishubDemak-002/streams', city: 'Demak' },
+    { url: 'https://www.youtube.com/@cctvdishubdemak/streams', city: 'Demak' },
+    { url: 'https://www.youtube.com/@CCTVDISHUBKOTAPONTIANAK/streams', city: 'Pontianak' },
+    { url: 'https://www.youtube.com/@dishubkabmagelang/streams', city: 'Kab. Magelang' },
+  ];
+  async function cctvYoutubeFetch() {
+    const raw = (CFG && Array.isArray(CFG.youtube_cctv_channels) && CFG.youtube_cctv_channels.length)
+      ? CFG.youtube_cctv_channels
+      : DEFAULT_YT_CHANNELS;
+    const seenIds = new Set();
+    const out = [];
+    await Promise.all(raw.map(async entry => {
+      const urlRaw = typeof entry === 'string' ? entry : (entry && entry.url);
+      const city = (typeof entry === 'object' && entry && entry.city) ? String(entry.city).trim() : 'YouTube Live';
+      const streamsUrl = normalizeYoutubeStreamsUrl(urlRaw);
+      if (!streamsUrl) return;
+      let html = '';
+      try {
+        html = await cctvFetch(streamsUrl, 12000, {
+          'accept-language': 'id-ID,id;q=0.9,en;q=0.8',
+          referer: 'https://www.youtube.com/',
+        });
+      } catch (e) {}
+      if (!html) return;
+      const cams = extractYoutubeLiveStreams(html, city);
+      for (const cam of cams) {
+        if (seenIds.has(cam.s)) continue;
+        seenIds.add(cam.s);
+        out.push(cam);
+      }
+    }));
+    return out;
+  }
+  const cctvYoutube = () => refreshSource('youtube', () => memo('cctv:youtube', 1800000, cctvYoutubeFetch, v => Array.isArray(v) && v.length > 0));
   const probeLane = makeLane(8, 2);
   const probeGet = (url, ms, h) => probeLane.run(new URL(url).host, () => mediaGetRaw(url, ms, h, null));
   const HLS_UA = { 'user-agent': UA, referer: 'https://bpjt.pu.go.id/', origin: 'https://probe.invalid' };
@@ -454,7 +491,7 @@ function createCctvCatalog({
   }
   const cctvReportedDead = s => GW.reportedDead(s);
   const cctvCatalog = () => memo('cctvcat', 300000, async () => {
-    const allBefore = srcDone.bpjt && srcDone.bekasi && srcDone.jogja && srcDone.molecool && srcDone.tangkab && srcDone.bali;
+    const allBefore = srcDone.bpjt && srcDone.bekasi && srcDone.jogja && srcDone.molecool && srcDone.tangkab && srcDone.bali && srcDone.youtube;
     const pAll = Promise.allSettled([
       cctvBpjt(),
       cctvBekasi(),
@@ -462,15 +499,16 @@ function createCctvCatalog({
       cctvMolecool(),
       cctvTangerangKab(),
       cctvBali(),
+      cctvYoutube(),
     ]);
     if (!cctvProbe.done.size && !cctvProbe.running) warmCctv().catch(() => {});
-    const hasSeed = lastGoodCams.length > 0 || srcCams.bpjt.length > 0 || srcCams.bekasi.length > 0 || srcCams.jogja.length > 0 || srcCams.molecool.length > 0 || srcCams.tangkab.length > 0 || srcCams.bali.length > 0;
+    const hasSeed = lastGoodCams.length > 0 || srcCams.bpjt.length > 0 || srcCams.bekasi.length > 0 || srcCams.jogja.length > 0 || srcCams.molecool.length > 0 || srcCams.tangkab.length > 0 || srcCams.bali.length > 0 || srcCams.youtube.length > 0;
     if (!(allBefore && hasSeed)) {
       await Promise.race([pAll, new Promise(r => setTimeout(r, hasSeed ? 3500 : 7500))]);
     }
     const bpjt = srcCams.bpjt;
     const jogja = srcCams.jogja;
-    const other = [...srcCams.tangkab, ...srcCams.bali, ...srcCams.bekasi, ...srcCams.molecool];
+    const other = [...srcCams.tangkab, ...srcCams.bali, ...srcCams.bekasi, ...srcCams.molecool, ...srcCams.youtube];
     const probeable = [...jogja, ...bpjt].filter(c =>
       cctvProbe.done.has(c.s) ? cctvProbe.alive.has(c.s) : (cctvProbe.alive.size < 24)
     );
@@ -490,7 +528,7 @@ function createCctvCatalog({
       lastGoodCams = CCTVCORE.dedupe(cams);
       saveCctvHist(false);
     }
-    const allSourcesDone = srcDone.bpjt && srcDone.bekasi && srcDone.jogja && srcDone.molecool && srcDone.tangkab && srcDone.bali;
+    const allSourcesDone = srcDone.bpjt && srcDone.bekasi && srcDone.jogja && srcDone.molecool && srcDone.tangkab && srcDone.bali && srcDone.youtube;
     const warming = !allSourcesDone || (cctvProbe.running && cctvProbe.alive.size < 24);
     return {
       ok: true,
@@ -513,4 +551,119 @@ function createCctvCatalog({
   };
 }
 
-module.exports = { createCctvCatalog };
+function normalizeYoutubeStreamsUrl(raw) {
+  try {
+    const u = new URL(String(raw || '').trim());
+    if (!/(^|\.)youtube\.com$/i.test(u.hostname)) return '';
+    let p = u.pathname.replace(/\/+$/, '');
+    if (!p) return '';
+    if (!/\/streams$/i.test(p)) p += '/streams';
+    return `https://www.youtube.com${p}`;
+  } catch (e) {
+    return '';
+  }
+}
+
+function cleanYoutubeCamTitle(raw) {
+  let s = String(raw || '').replace(/\s+/g, ' ').trim();
+  s = s.replace(/^(?:🔴\s*)?(?:live\s+streaming|live\s+cctv|streaming\s+cctv|cctv\s+live|cctv)\s*[-:|–—]*\s*/i, '');
+  s = s.replace(/\s*[-:|–—]\s*(?:dishub|kominfo|diskominfo)\b.*$/i, '');
+  return (s || String(raw || '').trim()).slice(0, 96);
+}
+
+function extractYoutubeInitialData(html) {
+  const src = String(html || '');
+  const markers = ['var ytInitialData = ', 'window["ytInitialData"] = ', 'ytInitialData = '];
+  for (const mk of markers) {
+    const idx = src.indexOf(mk);
+    if (idx === -1) continue;
+    const start = src.indexOf('{', idx + mk.length);
+    if (start === -1) continue;
+    let depth = 0, inStr = false, esc = false;
+    for (let i = start; i < src.length; i++) {
+      const ch = src[i];
+      if (inStr) {
+        if (esc) { esc = false; continue; }
+        if (ch === '\\') { esc = true; continue; }
+        if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') { inStr = true; continue; }
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          try { return JSON.parse(src.slice(start, i + 1)); } catch (e) { break; }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function isYoutubeVideoLive(vr) {
+  if (!vr || typeof vr !== 'object') return false;
+  if (vr.upcomingEventData) return false;
+  if (vr.lengthText && (vr.lengthText.simpleText || (Array.isArray(vr.lengthText.runs) && vr.lengthText.runs.length))) return false;
+  const overlays = Array.isArray(vr.thumbnailOverlays) ? vr.thumbnailOverlays : [];
+  let hasLiveOverlay = false;
+  for (const ov of overlays) {
+    const ts = ov && ov.thumbnailOverlayTimeStatusRenderer;
+    if (!ts) continue;
+    if (ts.style === 'UPCOMING') return false;
+    if (ts.style === 'LIVE') hasLiveOverlay = true;
+  }
+  const badges = Array.isArray(vr.badges) ? vr.badges : [];
+  let hasLiveBadge = false;
+  for (const b of badges) {
+    const mr = b && b.metadataBadgeRenderer;
+    if (!mr) continue;
+    if (mr.style === 'BADGE_STYLE_TYPE_LIVE_NOW' || /^LIVE$/i.test(String(mr.label || '').trim())) hasLiveBadge = true;
+  }
+  return hasLiveOverlay || hasLiveBadge;
+}
+
+function extractYoutubeLiveStreams(html, city) {
+  const data = extractYoutubeInitialData(html);
+  if (!data) return [];
+  const out = [];
+  const seen = new Set();
+  const walk = node => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if (node.videoRenderer && typeof node.videoRenderer === 'object') {
+      const vr = node.videoRenderer;
+      const vid = String(vr.videoId || '').trim();
+      if (/^[A-Za-z0-9_-]{11}$/.test(vid) && !seen.has(vid) && isYoutubeVideoLive(vr)) {
+        seen.add(vid);
+        const rawTitle = (vr.title && (vr.title.simpleText || (Array.isArray(vr.title.runs) ? vr.title.runs.map(r => r.text || '').join('') : ''))) || '';
+        const name = cleanYoutubeCamTitle(rawTitle) || `CCTV ${city} (${vid})`;
+        out.push({
+          n: name,
+          s: `https://www.youtube.com/watch?v=${vid}`,
+          e: `https://www.youtube.com/embed/${vid}?autoplay=1&mute=1`,
+          snap: `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
+          la: null,
+          lo: null,
+          c: city,
+          src: 'youtube',
+        });
+      }
+    }
+    for (const k of Object.keys(node)) {
+      if (k !== 'videoRenderer') walk(node[k]);
+    }
+  };
+  walk(data);
+  return out;
+}
+
+module.exports = {
+  createCctvCatalog,
+  normalizeYoutubeStreamsUrl,
+  cleanYoutubeCamTitle,
+  extractYoutubeLiveStreams,
+};

@@ -36,5 +36,13 @@
   ],
   "threads": {},
   "tomtom": {},
+  "youtube_cctv_channels": [
+    { "url": "https://www.youtube.com/@cctvpacitankab/streams", "city": "Pacitan" },
+    { "url": "https://www.youtube.com/@KominfoGunungkidul/streams", "city": "Gunungkidul" },
+    { "url": "https://www.youtube.com/@CCTVDishubDemak-002/streams", "city": "Demak" },
+    { "url": "https://www.youtube.com/@cctvdishubdemak/streams", "city": "Demak" },
+    { "url": "https://www.youtube.com/@CCTVDISHUBKOTAPONTIANAK/streams", "city": "Pontianak" },
+    { "url": "https://www.youtube.com/@dishubkabmagelang/streams", "city": "Kab. Magelang" }
+  ],
   "_note": "Topik sosial (X + Threads) ada di social.js (SOC_TOPICS). Satu registry, bukan daftar query per platform."
 }

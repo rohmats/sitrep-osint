@@ -88,6 +88,17 @@
   background:linear-gradient(180deg,rgba(255,255,255,.32) 0%,rgba(255,255,255,.06) 100%);
   transform:skewX(-18.5deg);pointer-events:none;
 }
+#btn-cctv{
+  gap:7px;padding:0 20px 0 20px;margin-left:-9px;
+  border-left:none;border-right:none;
+  clip-path:polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+  z-index:2;
+}
+#btn-cctv::after{
+  content:"";position:absolute;top:0;right:5px;bottom:0;width:1.5px;
+  background:linear-gradient(180deg,rgba(255,255,255,.32) 0%,rgba(255,255,255,.06) 100%);
+  transform:skewX(-18.5deg);pointer-events:none;
+}
 #btn-map{
   gap:7px;padding:0 18px 0 20px;margin-left:-9px;
   border-left:none;border-right:none;
@@ -145,6 +156,23 @@
   background:rgba(0,229,255,.18);color:#80f0ff;
   border-color:rgba(0,229,255,.14);
   text-shadow:0 0 6px rgba(0,229,255,.6);
+}
+#btn-cctv[aria-expanded="true"]{
+  background:linear-gradient(180deg,rgba(66,190,101,.26) 0%,rgba(26,120,54,.16) 100%);
+  border-color:rgba(66,190,101,.5);color:#fff;
+  box-shadow:inset 0 0 14px rgba(66,190,101,.25);
+}
+#btn-cctv[aria-expanded="true"]::after{
+  background:linear-gradient(180deg,#42be65,rgba(66,190,101,.4));
+  box-shadow:0 0 8px rgba(66,190,101,.8);
+}
+#btn-cctv[aria-expanded="true"] .ic{
+  color:#62c97f;filter:drop-shadow(0 0 5px rgba(66,190,101,.8));
+}
+#btn-cctv[aria-expanded="true"] .pod-tag{
+  background:rgba(66,190,101,.18);color:#8ff0a4;
+  border-color:rgba(66,190,101,.14);
+  text-shadow:0 0 6px rgba(66,190,101,.6);
 }
 
 .mapwrap{

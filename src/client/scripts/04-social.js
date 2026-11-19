@@ -302,7 +302,7 @@ $('#qchips').addEventListener('click', e => {
 });
 $('#xq').addEventListener('input', debounce(() => { xShown = 30; renderX(); }, 140));
 
-let tPosts = [], tAt = 0, tBusy = false, socTab = 'x';
+let tPosts = [], tAt = 0, tBusy = false, socTab = 'threads';
 let tQuery = '', tQueries = [], tTrending = [], tErrs = [], tNewestTs = 0;
 const tAll = new Map(); let tShown = 30;
 let tCold = false, tEmptyStreak = 0, tErrStreak = 0, tLastErr = '';

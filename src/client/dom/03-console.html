@@ -91,25 +91,25 @@
       <span class="ph-k">[03]</span>
       <h2 class="ph-t">Social</h2>
       <div class="soc-tabs" role="tablist" aria-label="Sumber sosial">
-        <button class="soc-tab" id="tab-x" type="button" role="tab" aria-selected="true" aria-controls="pane-x" data-tab="x">
-          <span class="lbl"><svg class="ic" aria-hidden="true"><use href="#i-x"></use></svg><span class="tx">Tweets</span></span>
-        </button>
-        <button class="soc-tab" id="tab-th" type="button" role="tab" aria-selected="false" aria-controls="pane-th" data-tab="threads">
+        <button class="soc-tab" id="tab-th" type="button" role="tab" aria-selected="true" aria-controls="pane-th" data-tab="threads">
           <span class="lbl"><svg class="ic" aria-hidden="true"><use href="#i-threads"></use></svg><span class="tx">Threads</span></span>
         </button>
+        <button class="soc-tab" id="tab-x" type="button" role="tab" aria-selected="false" aria-controls="pane-x" data-tab="x">
+          <span class="lbl"><svg class="ic" aria-hidden="true"><use href="#i-x"></use></svg><span class="tx">Tweets</span></span>
+        </button>
       </div>
+      <span class="ph-m" id="tmeta">—</span>
       <span class="ph-m" id="xmeta" hidden aria-hidden="true">—</span>
-      <span class="ph-m" id="tmeta" hidden aria-hidden="true">—</span>
     </div>
-    <div class="pb" id="pane-x" role="tabpanel" aria-labelledby="tab-x">
-      <div class="tools"><input class="inp cmd" id="xq" type="search" placeholder="Cari post atau akun…" aria-label="Cari post X"></div>
-      <div class="qchips" id="qchips"></div>
-      <div id="xlist"><div class="empty">Menghubungkan ke X…</div></div>
-    </div>
-    <div class="pb" id="pane-th" role="tabpanel" aria-labelledby="tab-th" hidden>
+    <div class="pb" id="pane-th" role="tabpanel" aria-labelledby="tab-th">
       <div class="tools"><input class="inp cmd" id="tq" type="search" placeholder="Cari post Threads…" aria-label="Cari post Threads"></div>
       <div class="qchips" id="qchips-th"></div>
       <div id="tlist"><div class="empty">Menghubungkan ke Threads…</div></div>
+    </div>
+    <div class="pb" id="pane-x" role="tabpanel" aria-labelledby="tab-x" hidden>
+      <div class="tools"><input class="inp cmd" id="xq" type="search" placeholder="Cari post atau akun…" aria-label="Cari post X"></div>
+      <div class="qchips" id="qchips"></div>
+      <div id="xlist"><div class="empty">Menghubungkan ke X…</div></div>
     </div>
   </section>
 
@@ -178,12 +178,17 @@
     </div>
   </div>
   <span class="geo-c" id="geo-count">— titik</span>
-  <span class="geo-acts" role="group" aria-label="Kontrol Live TV dan Peta Insiden">
-    <button class="geo-btn" id="btn-tv" type="button" aria-expanded="false" aria-controls="tvwrap">
+  <span class="geo-acts" role="group" aria-label="Kontrol Live TV, CCTV, dan Peta Insiden">
+    <button class="geo-btn" id="btn-tv" type="button" aria-expanded="false" aria-controls="tvdrawer">
       <span class="pod-led tv-led" aria-hidden="true"></span>
       <svg class="ic" aria-hidden="true"><use href="#i-tv"></use></svg>
       <span>Live TV</span>
       <span class="pod-tag">SIGINT</span>
+    </button>
+    <button class="geo-btn" id="btn-cctv" type="button" aria-expanded="false" aria-controls="cctvdrawer">
+      <svg class="ic" aria-hidden="true"><use href="#i-cam"></use></svg>
+      <span>CCTV</span>
+      <span class="pod-tag">GRID</span>
     </button>
     <button class="geo-btn" id="btn-map" type="button" aria-expanded="false" aria-controls="mapwrap">
       <svg class="ic" aria-hidden="true"><use href="#i-map"></use></svg>
@@ -277,6 +282,73 @@
     </span>
     <span class="sp" id="map-src">sumber —</span>
     <span class="cred">© Esri · TomTom · BMKG · PVMBG</span>
+  </div>
+</aside>
+
+<aside class="mapwrap tvdrawer" id="tvdrawer" aria-label="Live TV Indonesia & Global" aria-hidden="true" inert>
+  <div class="map-h">
+    <svg class="ic" aria-hidden="true"><use href="#i-tv"></use></svg>
+    <span class="map-t">Live TV · Siaran Langsung</span>
+    <span class="map-live"><i></i>Data Live</span>
+    <span class="map-m" id="tvd-meta">—</span>
+    <button class="map-x tvd-pip-btn" id="tvd-pip" type="button" title="Kecilkan ke mini-player">Mini PiP</button>
+    <button class="map-x" id="tvd-close" type="button">Tutup <svg class="ic" aria-hidden="true"><use href="#i-close"></use></svg></button>
+  </div>
+  <div class="tvd-layout">
+    <div class="tvd-stage">
+      <div class="tvd-player" id="tvd-body" data-state="idle">
+        <video id="tvd-video" playsinline muted controls></video>
+        <div class="tv-msg tvd-msg">
+          <b id="tvd-msg-t">Menghubungkan…</b>
+          <span id="tvd-msg-s">siaran langsung</span>
+          <a id="tvd-msg-link" href="#" target="_blank" rel="noopener">Buka di sumber</a>
+        </div>
+      </div>
+      <div class="tvd-bar">
+        <div class="tvd-now">
+          <span class="tvd-badge" id="tvd-badge">ID</span>
+          <b id="tvd-name">Metro TV</b>
+          <span class="tvd-grp" id="tvd-grp">Nasional (ID)</span>
+        </div>
+        <div class="tvd-ctrls">
+          <button class="mly" id="tvd-mute" type="button" aria-pressed="true" title="Suara"><svg class="ic" aria-hidden="true"><use href="#i-volx"></use></svg><span id="tvd-mute-lbl">Bisukan</span></button>
+          <button class="mly" id="tvd-reload" type="button" title="Muat ulang stream"><svg class="ic" aria-hidden="true"><use href="#i-sync"></use></svg><span>Muat Ulang</span></button>
+          <a class="mly" id="tvd-link" href="#" target="_blank" rel="noopener" title="Buka halaman sumber"><svg class="ic" aria-hidden="true"><use href="#i-out"></use></svg><span>Sumber</span></a>
+        </div>
+      </div>
+    </div>
+    <div class="tvd-list" id="tvd-list" role="listbox" aria-label="Daftar channel Live TV"></div>
+  </div>
+  <div class="map-f">
+    <span id="tvd-src">hls —</span>
+    <span class="sp">15 Channel · Nasional &amp; Internasional</span>
+    <span class="cred">Klik channel untuk pindah siaran</span>
+  </div>
+</aside>
+
+<aside class="mapwrap cctvdrawer" id="cctvdrawer" aria-label="CCTV Regional Indonesia" aria-hidden="true" inert>
+  <div class="map-h">
+    <svg class="ic" aria-hidden="true"><use href="#i-cam"></use></svg>
+    <span class="map-t">CCTV · Regional Indonesia</span>
+    <span class="map-live"><i></i>Data Live</span>
+    <span class="map-m" id="cd-meta">—</span>
+    <button class="map-x" id="cd-close" type="button">Tutup <svg class="ic" aria-hidden="true"><use href="#i-close"></use></svg></button>
+  </div>
+  <div class="cd-toolbar">
+    <div class="citybar cd-cities" id="cd-cities" role="tablist" aria-label="Wilayah kamera CCTV"></div>
+    <div class="cd-controls">
+      <div class="tools cam-tools cd-search"><input class="inp cmd" id="cd-q" type="search" placeholder="Cari kamera atau lokasi…" aria-label="Cari kamera di panel CCTV"></div>
+      <button class="cam-off-btn cd-off-btn" id="cd-off-tog" type="button" aria-pressed="false" hidden>Offline <span>0</span></button>
+      <button class="mly cd-refresh" id="cd-refresh" type="button" title="Refresh daftar &amp; snapshot CCTV" aria-label="Refresh CCTV"><svg class="ic" aria-hidden="true"><use href="#i-sync"></use></svg></button>
+    </div>
+  </div>
+  <div class="cd-body" id="cd-body">
+    <div class="camgrid cd-grid" id="cd-grid"></div>
+  </div>
+  <div class="map-f">
+    <span id="cd-stat">memuat…</span>
+    <span class="sp" id="cd-city-stat">Wilayah: Semua</span>
+    <span class="cred">Klik kamera untuk perbesar</span>
   </div>
 </aside>
 

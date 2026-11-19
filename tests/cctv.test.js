@@ -825,3 +825,73 @@ test('JKP Satpol PP Gatot Subroto C11 keeps active CCTV-01, drops dead CCTV-02, 
   const cctvJs = fs.readFileSync(path.join(__dirname, '..', 'src/client/scripts/07-cctv.js'), 'utf8');
   assert.match(cctvJs, /replace\(\/\[·\|\]\+\/g, ' '\)/, 'CCTV search must tokenize middot-separated queries like Name · City');
 });
+
+test('youtube cctv catalog: extracts only LIVE streams, filters out VOD recordings and upcoming, and normalizes URLs', () => {
+  const { normalizeYoutubeStreamsUrl, cleanYoutubeCamTitle, extractYoutubeLiveStreams } = require('../src/cctv-catalog');
+  assert.equal(normalizeYoutubeStreamsUrl('https://www.youtube.com/@cctvpacitankab'), 'https://www.youtube.com/@cctvpacitankab/streams');
+  assert.equal(normalizeYoutubeStreamsUrl('https://www.youtube.com/@KominfoGunungkidul/streams/'), 'https://www.youtube.com/@KominfoGunungkidul/streams');
+  assert.equal(cleanYoutubeCamTitle('LIVE CCTV Simpang Alun-Alun Wonosari - Kominfo Gunungkidul'), 'Simpang Alun-Alun Wonosari');
+
+  const fakeData = {
+    contents: {
+      twoColumnBrowseResultsRenderer: {
+        tabs: [{
+          tabRenderer: {
+            content: {
+              richGridRenderer: {
+                contents: [
+                  {
+                    richItemRenderer: {
+                      content: {
+                        videoRenderer: {
+                          videoId: 'LIVE1234567',
+                          title: { runs: [{ text: 'LIVE CCTV Bundaran Siyono - Kominfo Gunungkidul' }] },
+                          thumbnailOverlays: [{ thumbnailOverlayTimeStatusRenderer: { style: 'LIVE', text: { simpleText: 'LIVE' } } }],
+                          badges: [{ metadataBadgeRenderer: { style: 'BADGE_STYLE_TYPE_LIVE_NOW', label: 'LIVE' } }]
+                        }
+                      }
+                    }
+                  },
+                  {
+                    richItemRenderer: {
+                      content: {
+                        videoRenderer: {
+                          videoId: 'VOD12345678',
+                          title: { simpleText: 'Rekaman CCTV Alun-Alun' },
+                          lengthText: { simpleText: '2:14:05' },
+                          thumbnailOverlays: [{ thumbnailOverlayTimeStatusRenderer: { style: 'DEFAULT', text: { simpleText: '2:14:05' } } }]
+                        }
+                      }
+                    }
+                  },
+                  {
+                    richItemRenderer: {
+                      content: {
+                        videoRenderer: {
+                          videoId: 'UPC12345678',
+                          title: { simpleText: 'CCTV Segera Tayang' },
+                          upcomingEventData: { startTime: '1799999999' },
+                          thumbnailOverlays: [{ thumbnailOverlayTimeStatusRenderer: { style: 'UPCOMING' } }]
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }]
+      }
+    }
+  };
+  const fakeHtml = `<html><script>var ytInitialData = ${JSON.stringify(fakeData)};</script></html>`;
+  const cams = extractYoutubeLiveStreams(fakeHtml, 'Gunungkidul');
+  assert.equal(cams.length, 1);
+  assert.equal(cams[0].n, 'Bundaran Siyono');
+  assert.equal(cams[0].s, 'https://www.youtube.com/watch?v=LIVE1234567');
+  assert.equal(cams[0].e, 'https://www.youtube.com/embed/LIVE1234567?autoplay=1&mute=1');
+  assert.equal(cams[0].snap, 'https://i.ytimg.com/vi/LIVE1234567/hqdefault.jpg');
+  assert.equal(cams[0].c, 'Gunungkidul');
+  assert.equal(cams[0].src, 'youtube');
+});
+

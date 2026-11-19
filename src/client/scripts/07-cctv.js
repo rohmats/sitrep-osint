@@ -209,7 +209,7 @@ function enterSnapFallback(cell, p){
 function startCell(cell){
   const p = P.get(cell); if (!p || p.dead) return;
   const c = camList[+cell.dataset.i];
-  if (c && isDirectSnapFeed(c.s, c)) {
+  if (c && (isDirectSnapFeed(c.s, c) || /youtube\.com\/embed\//i.test(c.e || ''))) {
     p.stopped = false;
     if (!enterSnapFallback(cell, p)) kill(cell);
     return;
@@ -1228,7 +1228,7 @@ function openLightbox(url, nama, kota, embed, steps, trigger){
       sim.onload = null; sim.onerror = null; sim.removeAttribute('src');
     }
   }
-  if (isDirectSnapFeed(url, camObj)) {
+  if (isDirectSnapFeed(url, camObj) || /youtube\.com\/embed\//i.test(glbEmbed)) {
     glbFallbackEmbed();
     return;
   }
@@ -1271,12 +1271,169 @@ addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (!$('#lightbox').hidden) { closeLightbox(); return; }
     if (rdOn) { rdClose(); return; }
+    if (typeof cdOpen !== 'undefined' && cdOpen) { closeCctvDrawer(); return; }
+    if (typeof tvdOn !== 'undefined' && tvdOn) { closeTvDrawer(); return; }
     if ($('#mapwrap').classList.contains('on')) { closeMap(); return; }
     if (tvOn) { tvClose(); return; }
   }
   if (e.key === '/' && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) { e.preventDefault(); fltSet(true, true); }
   if ((e.key === 'r' || e.key === 'R') && !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) refreshAll(true);
 });
+
+let cdOpen = false, cdCity = 'Semua', cdShowOff = false, cdList = [];
+function sizeCctvDrawer(){
+  const w = innerWidth, wrap = $('#cctvdrawer');
+  if (!wrap) return;
+  if (w > 1180) {
+    const p3 = document.querySelectorAll('.pane')[2];
+    const left = p3 ? Math.round(p3.getBoundingClientRect().left) : Math.round(w / 2);
+    wrap.style.width = (w - left) + 'px';
+  } else {
+    wrap.style.width = '';
+  }
+}
+function drawCdCities(){
+  const bar = $('#cd-cities');
+  if (!bar) return;
+  const cnt = {};
+  CAMS.forEach(c => {
+    if (c._hide === true) return;
+    if (camIsFlood(c)) cnt['Pantau Banjir'] = (cnt['Pantau Banjir'] || 0) + 1;
+    const pk = camPrimaryCity(c);
+    if (pk !== 'Pantau Banjir') cnt[pk] = (cnt[pk] || 0) + 1;
+  });
+  const otherCities = Object.keys(cnt)
+    .filter(k => k !== 'Pantau Banjir' && k !== 'Kota Jakarta')
+    .sort((a, b) => cnt[b] - cnt[a]);
+  const ds = ['Semua'];
+  if (cnt['Pantau Banjir']) ds.push('Pantau Banjir');
+  if (cnt['Kota Jakarta']) ds.push('Kota Jakarta');
+  ds.push(...otherCities);
+  bar.innerHTML = ds.map((d, idx) => {
+    const n = CAMS.filter(c => c._hide !== true && camInDistrict(c, d)).length;
+    const num = String(idx).padStart(2, '0');
+    return `<button class="cb" type="button" data-city="${esc(d)}" role="tab" aria-selected="${d === cdCity}">` +
+      `<span class="cb-idx">${num}</span>` +
+      `<span class="cb-name">${esc(d)}</span>` +
+      `<span class="cb-n">${n}</span>` +
+    `</button>`;
+  }).join('');
+}
+function renderCctvDrawer(){
+  const grid = $('#cd-grid');
+  if (!grid || !cdOpen) return;
+  const qEl = $('#cd-q');
+  const q = ((qEl && qEl.value) || '').toLowerCase().replace(/[·|]+/g, ' ').trim();
+  const base = CAMS.filter(c => c._hide !== true && camInDistrict(c, cdCity) && (!q || ((c.n || '') + ' ' + (c.c || '') + ' ' + (c.sub || '') + ' ' + (c.tags || '')).toLowerCase().replace(/[·|]+/g, ' ').includes(q)));
+  const aliveSet = aliveMap ? new Set(aliveMap) : null;
+  let offCount = 0;
+  const visible = [];
+  for (const c of base) {
+    const isOff = Boolean(c._srvOff || (aliveSet && !aliveSet.has(c.s)));
+    if (isOff) offCount++;
+    if (!isOff || cdShowOff) visible.push({ c, isOff });
+  }
+  cdList = visible.map(x => x.c);
+  const tog = $('#cd-off-tog');
+  if (tog) {
+    tog.hidden = offCount === 0 && !cdShowOff;
+    tog.setAttribute('aria-pressed', String(cdShowOff));
+    const sp = tog.querySelector('span');
+    if (sp) sp.textContent = String(offCount);
+  }
+  grid.classList.toggle('show-offline', cdShowOff);
+  if (!visible.length) {
+    grid.innerHTML = '<div class="cd-empty">Tidak ada kamera yang cocok dengan filter saat ini.</div>';
+  } else {
+    grid.innerHTML = visible.map(({ c, isOff }, idx) => {
+      const snapSrc = c.snap ? c.snap : ((camSnapOK && API != null && !c.e) ? tokQ(API + '/api/cctv/snap?u=' + encodeURIComponent(c.s)) : '');
+      const badgeHtml = isOff
+        ? '<span class="badge off">Offline</span>'
+        : '<span class="badge live">Live</span>';
+      const imgHtml = snapSrc ? `<img class="snap" src="${escUrl(snapSrc)}" alt="" loading="lazy" onerror="this.remove()">` : '';
+      return `<div class="cam${isOff ? ' is-offline' : ''}" data-cdi="${idx}" role="button" tabindex="0" aria-label="${esc(c.n)}">
+        <div class="frame">${imgHtml}${badgeHtml}</div>
+        <div class="cap"><span>${esc(c.n)}</span><span class="cd-city">${esc(c.c || c.sub || '')}</span></div>
+      </div>`;
+    }).join('');
+  }
+  const onlineCount = base.length - offCount;
+  if ($('#cd-meta')) $('#cd-meta').textContent = `${onlineCount}/${base.length} online`;
+  if ($('#cd-stat')) $('#cd-stat').textContent = `kamera: ${visible.length} tampil · ${onlineCount} aktif`;
+  if ($('#cd-city-stat')) $('#cd-city-stat').textContent = `Wilayah: ${cdCity}`;
+}
+function openCctvDrawer(){
+  if (cdOpen) return;
+  if (typeof closeMap === 'function' && $('#mapwrap') && $('#mapwrap').classList.contains('on')) closeMap();
+  if (typeof closeTvDrawer === 'function') closeTvDrawer(true);
+  sizeCctvDrawer();
+  const wrap = $('#cctvdrawer');
+  if (!wrap) return;
+  cdOpen = true;
+  drawCdCities();
+  wrap.classList.add('on');
+  wrap.inert = false;
+  wrap.setAttribute('aria-hidden', 'false');
+  if ($('#btn-cctv')) $('#btn-cctv').setAttribute('aria-expanded', 'true');
+  renderCctvDrawer();
+  setTimeout(() => { if ($('#cd-close')) $('#cd-close').focus(); }, 60);
+}
+function closeCctvDrawer(silent){
+  if (!cdOpen) return;
+  cdOpen = false;
+  const wrap = $('#cctvdrawer');
+  if (wrap) {
+    wrap.classList.remove('on');
+    wrap.inert = true;
+    wrap.setAttribute('aria-hidden', 'true');
+  }
+  if ($('#btn-cctv')) {
+    $('#btn-cctv').setAttribute('aria-expanded', 'false');
+    if (!silent) $('#btn-cctv').focus();
+  }
+}
+addEventListener('resize', () => { if (cdOpen) sizeCctvDrawer(); });
+if ($('#btn-cctv')) $('#btn-cctv').addEventListener('click', () => {
+  if (cdOpen) closeCctvDrawer();
+  else openCctvDrawer();
+});
+if ($('#cd-close')) $('#cd-close').addEventListener('click', () => closeCctvDrawer());
+if ($('#cd-cities')) $('#cd-cities').addEventListener('click', e => {
+  const b = e.target.closest('.cb');
+  if (!b) return;
+  cdCity = b.dataset.city;
+  drawCdCities();
+  renderCctvDrawer();
+});
+if ($('#cd-q')) $('#cd-q').addEventListener('input', debounce(renderCctvDrawer, 160));
+if ($('#cd-off-tog')) $('#cd-off-tog').addEventListener('click', () => {
+  cdShowOff = !cdShowOff;
+  renderCctvDrawer();
+});
+if ($('#cd-refresh')) $('#cd-refresh').addEventListener('click', () => {
+  pullAlive();
+  pullCctv();
+  renderCctvDrawer();
+});
+if ($('#cd-grid')) {
+  const openFromCd = e => {
+    const cell = e.target.closest('.cam[data-cdi]');
+    if (!cell) return;
+    const idx = parseInt(cell.dataset.cdi, 10);
+    const c = Number.isFinite(idx) ? cdList[idx] : null;
+    if (!c) return;
+    openLightbox(c.s, c.n, camSubLabel(c), c.e || '', null, cell);
+  };
+  $('#cd-grid').addEventListener('click', openFromCd);
+  $('#cd-grid').addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      const cell = e.target.closest('.cam[data-cdi]');
+      if (!cell) return;
+      e.preventDefault();
+      openFromCd(e);
+    }
+  });
+}
 async function pullAlive(){
   if (API == null) return;
   try {

@@ -167,7 +167,17 @@ function tvMute(on){
   b.setAttribute('aria-pressed', on ? 'true' : 'false');
   b.setAttribute('aria-label', on ? 'Nyalakan suara' : 'Bisukan');
   b.querySelector('use').setAttribute('href', on ? '#i-volx' : '#i-vol');
-  if (!on) v.play().catch(() => {});
+  if (!on && tvOn) v.play().catch(() => {});
+  const dv = $('#tvd-video'), db = $('#tvd-mute'), dl = $('#tvd-mute-lbl');
+  if (dv) {
+    dv.muted = on;
+    if (!on && tvdOn) dv.play().catch(() => {});
+  }
+  if (db) {
+    db.setAttribute('aria-pressed', on ? 'true' : 'false');
+    db.querySelector('use').setAttribute('href', on ? '#i-volx' : '#i-vol');
+  }
+  if (dl) dl.textContent = on ? 'Nyalakan' : 'Bisukan';
 }
 function tvStep(d){
   tvIx = (tvIx + d + TV_CH.length) % TV_CH.length;
@@ -234,9 +244,194 @@ function tvClose(){
   $('#btn-tv').setAttribute('aria-expanded', 'false');
   $('#btn-tv').focus();
 }
+let tvdOn = false, tvdHls = null, tvdPx = false, tvdTry = 0, tvdRetryT = null, tvdLoadT = null;
+function sizeTvDrawer(){
+  const w = innerWidth, wrap = $('#tvdrawer');
+  if (!wrap) return;
+  if (w > 1180) {
+    const p3 = document.querySelectorAll('.pane')[2];
+    const left = p3 ? Math.round(p3.getBoundingClientRect().left) : Math.round(w / 2);
+    wrap.style.width = (w - left) + 'px';
+  } else {
+    wrap.style.width = '';
+  }
+}
+function renderTvdList(){
+  const list = $('#tvd-list');
+  if (!list) return;
+  let curGrp = '', h = '';
+  TV_CH.forEach((c, idx) => {
+    if (c.grp !== curGrp) {
+      curGrp = c.grp;
+      h += `<div class="tvd-sec">${esc(curGrp)}</div>`;
+    }
+    const act = idx === tvIx ? ' active' : '';
+    h += `<button class="tvd-ch${act}" type="button" role="option" aria-selected="${idx === tvIx}" data-idx="${idx}">
+      <span class="tvd-ch-dot"></span>
+      <span class="tvd-ch-name">${esc(c.n)}</span>
+      <span class="tvd-ch-badge">${esc(c.badge || 'LIVE')}</span>
+    </button>`;
+  });
+  list.innerHTML = h;
+}
+function tvdPaint(){
+  const c = TV_CH[tvIx];
+  if (!c) return;
+  if ($('#tvd-name')) $('#tvd-name').textContent = c.n;
+  if ($('#tvd-badge')) $('#tvd-badge').textContent = c.badge || 'LIVE';
+  if ($('#tvd-grp')) $('#tvd-grp').textContent = c.grp || '';
+  if ($('#tvd-src')) $('#tvd-src').textContent = 'sumber: ' + c.src;
+  if ($('#tvd-meta')) $('#tvd-meta').textContent = `${c.n} · ${c.badge || 'LIVE'}`;
+  if ($('#tvd-link')) $('#tvd-link').href = c.pg;
+  if ($('#tvd-msg-link')) $('#tvd-msg-link').href = c.pg;
+  if ($('#tvd-msg-s')) $('#tvd-msg-s').textContent = c.n;
+  $$('#tvd-list .tvd-ch').forEach((btn, idx) => {
+    const on = idx === tvIx;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+}
+function tvdFail(msg){
+  const body = $('#tvd-body');
+  if (body) body.dataset.state = 'fail';
+  if ($('#tvd-msg-t')) $('#tvd-msg-t').textContent = 'CHANNEL OFFLINE';
+  if ($('#tvd-msg-s')) $('#tvd-msg-s').textContent = (msg ? msg + ' · ' : '') + 'klik Muat Ulang atau pilih channel lain';
+}
+function tvdStop(){
+  clearTimeout(tvdLoadT); tvdLoadT = null;
+  clearTimeout(tvdRetryT); tvdRetryT = null;
+  const v = $('#tvd-video');
+  if (tvdHls) { try { tvdHls.destroy(); } catch (e) {} tvdHls = null; }
+  if (v) {
+    try { v.pause(); } catch (e) {}
+    v.removeAttribute('src');
+    try { v.load(); } catch (e) {}
+  }
+}
+function tvdPlay(){
+  const c = TV_CH[tvIx], v = $('#tvd-video'), body = $('#tvd-body');
+  if (!c || !v || !body) return;
+  const src = (tvdPx && API != null) ? tokQ(API + '/hls?u=' + encodeURIComponent(c.s)) : c.s;
+  tvdPaint();
+  tvPaint();
+  tvdStop();
+  body.dataset.state = 'load';
+  if ($('#tvd-msg-t')) $('#tvd-msg-t').textContent = 'Menghubungkan…';
+  v.muted = $('#tv-mute').getAttribute('aria-pressed') === 'true';
+  const retryPx = h => {
+    if (tvdPx || API == null || tvdTry >= 3) return false;
+    tvdPx = true; tvdTry++;
+    if (tvdHls === h) { try { h.destroy(); } catch (e) {} tvdHls = null; }
+    setTimeout(() => { if (tvdOn) tvdPlay(); }, 700);
+    return true;
+  };
+  tvdLoadT = setTimeout(() => {
+    if (tvdOn && body.dataset.state === 'load') {
+      if (retryPx(tvdHls)) return;
+      tvdFail('koneksi lambat / timeout');
+    }
+  }, 9000);
+  const markOk = () => {
+    clearTimeout(tvdLoadT); tvdLoadT = null;
+    clearTimeout(tvdRetryT); tvdRetryT = null;
+    body.dataset.state = 'ok';
+  };
+  if (typeof Hls === 'undefined') {
+    ensureHls().then(() => { if (tvdOn) tvdPlay(); })
+      .catch(() => { if (tvdOn && v.canPlayType('application/vnd.apple.mpegurl')) tvdPlay(); else tvdFail('HLS gagal dimuat'); });
+    return;
+  }
+  if (Hls.isSupported()) {
+    const h = new Hls({ enableWorker: true, lowLatencyMode: true, maxBufferLength: 16, backBufferLength: 8 });
+    tvdHls = h;
+    h.on(Hls.Events.MANIFEST_PARSED, () => {
+      if (tvdHls !== h) return;
+      v.play().then(markOk).catch(() => { v.muted = true; tvMute(true); v.play().then(markOk).catch(() => {}); });
+    });
+    v.onplaying = markOk;
+    h.on(Hls.Events.ERROR, (ev, data) => {
+      if (!data.fatal || tvdHls !== h) return;
+      if (retryPx(h)) return;
+      try { h.destroy(); } catch (e) {}
+      if (tvdHls === h) tvdHls = null;
+      tvdFail(data.type || 'stream error');
+      tvdRetryT = setTimeout(() => { tvdRetryT = null; if (tvdOn) tvdPlay(); }, 90000);
+    });
+    h.loadSource(src);
+    h.attachMedia(v);
+  } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+    v.src = src;
+    v.onloadeddata = () => { v.play().then(markOk).catch(() => {}); };
+    v.onplaying = markOk;
+    v.onerror = () => {
+      if (retryPx(null)) return;
+      tvdFail('stream tidak merespon');
+      tvdRetryT = setTimeout(() => { tvdRetryT = null; if (tvdOn) tvdPlay(); }, 90000);
+    };
+  } else {
+    clearTimeout(tvdLoadT); tvdLoadT = null;
+    tvdFail('HLS tidak didukung browser ini');
+  }
+}
+function openTvDrawer(){
+  if (tvdOn) return;
+  if (typeof closeMap === 'function' && $('#mapwrap') && $('#mapwrap').classList.contains('on')) closeMap();
+  if (typeof closeCctvDrawer === 'function') closeCctvDrawer(true);
+  if (tvOn) {
+    tvOn = false;
+    tvToggleMenu(false);
+    clearTimeout(tvIdleT);
+    clearTimeout(tvRetryT); tvRetryT = null;
+    tvStop();
+    const w = $('#tvwrap');
+    w.classList.remove('on', 'idle');
+    w.setAttribute('aria-hidden', 'true');
+  }
+  sizeTvDrawer();
+  const wrap = $('#tvdrawer');
+  if (!wrap) return;
+  tvdOn = true;
+  renderTvdList();
+  wrap.classList.add('on');
+  wrap.inert = false;
+  wrap.setAttribute('aria-hidden', 'false');
+  $('#btn-tv').setAttribute('aria-expanded', 'true');
+  tvdPx = false; tvdTry = 0;
+  tvdPlay();
+  setTimeout(() => { if ($('#tvd-close')) $('#tvd-close').focus(); }, 60);
+}
+function closeTvDrawer(silent){
+  if (!tvdOn) return;
+  tvdOn = false;
+  tvdStop();
+  const wrap = $('#tvdrawer');
+  if (wrap) {
+    wrap.classList.remove('on');
+    wrap.inert = true;
+    wrap.setAttribute('aria-hidden', 'true');
+  }
+  $('#btn-tv').setAttribute('aria-expanded', 'false');
+  if (!silent) $('#btn-tv').focus();
+}
+addEventListener('resize', () => { if (tvdOn) sizeTvDrawer(); });
 $('#btn-tv').addEventListener('click', () => {
-  if (tvOn) tvClose();
-  else tvOpen();
+  if (tvdOn) closeTvDrawer();
+  else openTvDrawer();
+});
+if ($('#tvd-close')) $('#tvd-close').addEventListener('click', () => closeTvDrawer());
+if ($('#tvd-pip')) $('#tvd-pip').addEventListener('click', () => { closeTvDrawer(true); tvOpen(); });
+if ($('#tvd-mute')) $('#tvd-mute').addEventListener('click', () => tvMute($('#tv-mute').getAttribute('aria-pressed') !== 'true'));
+if ($('#tvd-reload')) $('#tvd-reload').addEventListener('click', () => { tvdPx = false; tvdTry = 0; tvdPlay(); });
+if ($('#tvd-list')) $('#tvd-list').addEventListener('click', e => {
+  const opt = e.target.closest('.tvd-ch');
+  if (!opt) return;
+  const idx = parseInt(opt.dataset.idx, 10);
+  if (Number.isFinite(idx) && idx >= 0 && idx < TV_CH.length) {
+    tvIx = idx;
+    tvdPx = false; tvdTry = 0;
+    tvPx = false; tvTry = 0;
+    tvdPlay();
+  }
 });
 $('#tv-close').addEventListener('click', tvClose);
 $('#tv-ch-btn').addEventListener('click', e => {
