@@ -29,7 +29,7 @@ function getJakLoader(){
 const hlsJak = cfg => { const jl = getJakLoader(); return jl ? Object.assign({loader:jl}, cfg) : cfg; };
 let aliveMap = null, district = 'Semua', camList = [], showOfflineCams = false;
 
-const MAXL = 8, PERHOST = 4, LIVE_CAP = 12, SOFT_MS = 12000, OFF_FREE_MS = 20000, ORDER_COOLDOWN_MS = 4000;
+const MAXL = 4, PERHOST = 3, LIVE_CAP = 6, SOFT_MS = 12000, OFF_FREE_MS = 4000, ORDER_COOLDOWN_MS = 4000;
 let camSnapOK = false, lastOrderAt = 0, orderTimer = 0, orderDeferred = false;
 
 const HEDGE_MS = 2500, hostMode = new Map(), hostWin = new Map();
@@ -784,6 +784,11 @@ function onCctvScroll(e){
   const st = (t && typeof t.scrollTop === 'number') ? t.scrollTop : (window.scrollY || document.documentElement.scrollTop || 0);
   cctvScrollDir = st >= cctvLastScrollTop ? 'down' : 'up';
   cctvLastScrollTop = st;
+  const pb = camGrid && camGrid.parentElement;
+  if (pb && pb.scrollTop + pb.clientHeight >= pb.scrollHeight - 260 && camList.length < camTotalAvail) {
+    camPageLimit += 24;
+    renderCams();
+  }
   refreshCamVis();
   clearTimeout(camScrollEndT);
   camScrollEndT = setTimeout(runPump, 120);
@@ -888,12 +893,15 @@ function wantList(){
   list.sort((a, b) => ((a._srvOff ? 1 : 0) - (b._srvOff ? 1 : 0)) || ((isToll(a) ? 1 : 0) - (isToll(b) ? 1 : 0)) || (a._i - b._i));
   return list;
 }
-let camsRenderQueued = false;
+let camsRenderQueued = false, camPageLimit = 24, camTotalAvail = 0;
 function renderCams(){
 
   if (document.hidden) { camsRenderQueued = true; return; }
   camsRenderQueued = false;
-  const nextList = wantList();
+  const fullList = wantList();
+  camTotalAvail = fullList.length;
+  const hasSearch = Boolean($('#cq') && $('#cq').value.trim());
+  const nextList = hasSearch ? fullList : fullList.slice(0, camPageLimit);
   if (!P.size) {
     camList = nextList;
     camGrid.innerHTML = camList.map(cellHtml).join('');

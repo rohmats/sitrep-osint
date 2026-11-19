@@ -388,7 +388,7 @@ const hexA = (hex, a) => {
 };
 function fetchGlobe(){
   if (globeReady) return Promise.resolve(true);
-  const grab = (url) => fetch(url, { cache: 'no-store' }).then(r => {
+  const grab = (url) => fetch(url).then(r => {
     if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + url);
     return r.json();
   });

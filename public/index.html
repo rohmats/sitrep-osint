@@ -10,23 +10,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..600&family=IBM+Plex+Mono:wght@400;500;600;700&family=Lexend:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" defer></script>
 <style>.leaflet-velocity { pointer-events: none !important; } .velocity-overlay, canvas.velocity-overlay { pointer-events: none !important; }</style>
 <script src="signals.js"></script>
 <script src="wxicons.js"></script>
 <script src="wire-core.js"></script>
 <script src="cctv-core.js"></script>
 <script>
-if (typeof HTMLCanvasElement !== 'undefined' && !HTMLCanvasElement.prototype._sitrepPatched) {
-  HTMLCanvasElement.prototype._sitrepPatched = true;
-  const _origGetCtx = HTMLCanvasElement.prototype.getContext;
-  HTMLCanvasElement.prototype.getContext = function(type, attribs) {
-    if (type === '2d') {
-      attribs = Object.assign({ willReadFrequently: true }, attribs);
-    }
-    return _origGetCtx.call(this, type, attribs);
-  };
-}
 const _extCssDone = new Set(), _extJsP = new Map();
 function loadExtCss(href) {
   if (_extCssDone.has(href) || document.querySelector('link[href="' + href + '"]')) { _extCssDone.add(href); return; }
@@ -1181,6 +1171,7 @@ a{color:inherit;text-decoration:none;text-underline-offset:2px}
 .tw{
   position:relative;display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px;
   padding:15px 14px 13px;border-bottom:1px solid var(--border);transition:background .12s;
+  content-visibility:auto;contain-intrinsic-size:auto 140px;
 }
 .tw:hover{background:#1b1b1b}
 
@@ -1301,6 +1292,7 @@ a{color:inherit;text-decoration:none;text-underline-offset:2px}
 }
 #nlist{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)}
 #nlist>.nw-day,#nlist>.empty{grid-column:1/-1}
+#nlist>*:not(.nw-day):not(.empty){content-visibility:auto;contain-intrinsic-size:auto 96px}
 .nw-full{grid-column:1/-1}
 
 .nw-sk-line{display:block;height:9px;border-radius:2px;background:linear-gradient(90deg,#191919 20%,#292929 48%,#191919 76%);background-size:220% 100%;animation:nw-shimmer 1.35s ease-in-out infinite}
@@ -1462,7 +1454,7 @@ a{color:inherit;text-decoration:none;text-underline-offset:2px}
 .cb[aria-selected="true"]:hover{background:rgba(255,255,255,.06);color:#fff}
 .cb:focus-visible{outline:1px solid rgba(255,255,255,.3);outline-offset:-1px;z-index:4}
 .camgrid{display:grid;grid-template-columns:repeat(var(--cols,2),minmax(0,1fr));gap:1px;background:var(--border)}
-.cam{position:relative;display:block;width:100%;padding:0;background:#000;text-align:left;cursor:pointer;outline:none}
+.cam{position:relative;display:block;width:100%;padding:0;background:#000;text-align:left;cursor:pointer;outline:none;content-visibility:auto;contain-intrinsic-size:200px 135px}
 .cam:focus,.cam:focus-visible{outline:none}
 .cam .frame{position:relative;aspect-ratio:16/9;overflow:hidden;background:#000}
 .cam video{width:100%;height:100%;object-fit:cover;display:block;background:transparent;outline:none;opacity:0;transition:opacity .2s ease-in-out}
@@ -1525,7 +1517,7 @@ a{color:inherit;text-decoration:none;text-underline-offset:2px}
   font:600 8px/1 var(--mono);letter-spacing:.07em;text-transform:uppercase;
 }
 .badge.live{
-  background:rgba(10,10,10,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  background:rgba(10,10,10,.78);
   color:#ff8f92;border:none;border-radius:8px;
   display:inline-flex;align-items:center;gap:4px;
 }
@@ -1638,6 +1630,7 @@ a{color:inherit;text-decoration:none;text-underline-offset:2px}
   position:relative;display:grid;grid-template-columns:40px minmax(0,1fr);gap:11px;
   padding:15px 14px 13px;background:#151515;border-bottom:1px solid #2a2a2a;
   transition:background .12s;
+  content-visibility:auto;contain-intrinsic-size:auto 140px;
 }
 .th:hover{background:#191919}
 .th-av{
@@ -3869,7 +3862,7 @@ const hexA = (hex, a) => {
 };
 function fetchGlobe(){
   if (globeReady) return Promise.resolve(true);
-  const grab = (url) => fetch(url, { cache: 'no-store' }).then(r => {
+  const grab = (url) => fetch(url).then(r => {
     if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + url);
     return r.json();
   });
@@ -7965,33 +7958,51 @@ function buildTicker(force){
     }
     if (!matched) tkX = ((tkX % setW) + setW) % setW;
     tickTrack.style.transform = 'translate3d(' + (-tkX).toFixed(2) + 'px,0,0)';
+    if (typeof wakeTicker === 'function') wakeTicker();
   }
 }
 
-let tkX = 0, tkSetW = 0, tkLast = 0, tkHold = false, tkVel = TICK_PX_S;
+let tkX = 0, tkSetW = 0, tkLast = 0, tkHold = false, tkVel = TICK_PX_S, tkRaf = 0;
+const tkReduceMq = matchMedia('(prefers-reduced-motion:reduce)');
+function tkCanRun() {
+  return !document.hidden && !tkHold && !tkReduceMq.matches && tkSetW > 0 && breakItems.length > 0;
+}
+function wakeTicker() {
+  if (!tkRaf && tkCanRun()) {
+    tkLast = 0;
+    tkRaf = requestAnimationFrame(tkFrame);
+  }
+}
 function tkFrame(t) {
+  tkRaf = 0;
+  if (!breakItems.length || tkSetW <= 0) {
+    tickTrack.style.transform = '';
+    return;
+  }
+  if (document.hidden || tkReduceMq.matches) return;
   const dt = tkLast ? Math.min(t - tkLast, 100) / 1000 : 0;
   tkLast = t;
-  if (tkSetW > 0 && breakItems.length) {
-    const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
-    const targetVel = (tkHold || reduce) ? 0 : TICK_PX_S;
-    tkVel += (targetVel - tkVel) * Math.min(1, dt * 12);
-    if (tkVel > 0.05) tkX += tkVel * dt;
+  const targetVel = tkHold ? 0 : TICK_PX_S;
+  tkVel += (targetVel - tkVel) * Math.min(1, dt * 12);
+  if (tkVel > 0.05) {
+    tkX += tkVel * dt;
     if (tkX >= tkSetW) tkX %= tkSetW;
     tickTrack.style.transform = 'translate3d(' + (-tkX).toFixed(2) + 'px,0,0)';
-  } else tickTrack.style.transform = '';
-  requestAnimationFrame(tkFrame);
+  }
+  if (!tkHold || tkVel > 0.1) tkRaf = requestAnimationFrame(tkFrame);
 }
-requestAnimationFrame(tkFrame);
+wakeTicker();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) wakeTicker(); });
+if (tkReduceMq.addEventListener) tkReduceMq.addEventListener('change', () => { if (!tkReduceMq.matches) wakeTicker(); });
 {
 
   const vpEl = $('.tk-vp');
   if (vpEl && matchMedia('(hover:hover)').matches) {
     vpEl.addEventListener('mouseenter', () => { tkHold = true; });
-    vpEl.addEventListener('mouseleave', () => { tkHold = false; });
+    vpEl.addEventListener('mouseleave', () => { tkHold = false; wakeTicker(); });
     vpEl.addEventListener('focusin', () => { tkHold = true; });
     vpEl.addEventListener('focusout', e => {
-      if (!vpEl.contains(e.relatedTarget)) tkHold = false;
+      if (!vpEl.contains(e.relatedTarget)) { tkHold = false; wakeTicker(); }
     });
   }
 }
@@ -8101,7 +8112,7 @@ function getJakLoader(){
 const hlsJak = cfg => { const jl = getJakLoader(); return jl ? Object.assign({loader:jl}, cfg) : cfg; };
 let aliveMap = null, district = 'Semua', camList = [], showOfflineCams = false;
 
-const MAXL = 8, PERHOST = 4, LIVE_CAP = 12, SOFT_MS = 12000, OFF_FREE_MS = 20000, ORDER_COOLDOWN_MS = 4000;
+const MAXL = 4, PERHOST = 3, LIVE_CAP = 6, SOFT_MS = 12000, OFF_FREE_MS = 4000, ORDER_COOLDOWN_MS = 4000;
 let camSnapOK = false, lastOrderAt = 0, orderTimer = 0, orderDeferred = false;
 
 const HEDGE_MS = 2500, hostMode = new Map(), hostWin = new Map();
@@ -8856,6 +8867,11 @@ function onCctvScroll(e){
   const st = (t && typeof t.scrollTop === 'number') ? t.scrollTop : (window.scrollY || document.documentElement.scrollTop || 0);
   cctvScrollDir = st >= cctvLastScrollTop ? 'down' : 'up';
   cctvLastScrollTop = st;
+  const pb = camGrid && camGrid.parentElement;
+  if (pb && pb.scrollTop + pb.clientHeight >= pb.scrollHeight - 260 && camList.length < camTotalAvail) {
+    camPageLimit += 24;
+    renderCams();
+  }
   refreshCamVis();
   clearTimeout(camScrollEndT);
   camScrollEndT = setTimeout(runPump, 120);
@@ -8960,12 +8976,15 @@ function wantList(){
   list.sort((a, b) => ((a._srvOff ? 1 : 0) - (b._srvOff ? 1 : 0)) || ((isToll(a) ? 1 : 0) - (isToll(b) ? 1 : 0)) || (a._i - b._i));
   return list;
 }
-let camsRenderQueued = false;
+let camsRenderQueued = false, camPageLimit = 24, camTotalAvail = 0;
 function renderCams(){
 
   if (document.hidden) { camsRenderQueued = true; return; }
   camsRenderQueued = false;
-  const nextList = wantList();
+  const fullList = wantList();
+  camTotalAvail = fullList.length;
+  const hasSearch = Boolean($('#cq') && $('#cq').value.trim());
+  const nextList = hasSearch ? fullList : fullList.slice(0, camPageLimit);
   if (!P.size) {
     camList = nextList;
     camGrid.innerHTML = camList.map(cellHtml).join('');
@@ -10477,7 +10496,7 @@ function ensureMap(){
   geoCtxLayer = L.layerGroup().addTo(map);
   (typeof globeProv !== 'undefined' && globeProv
     ? Promise.resolve(globeProv)
-    : fetch('/idn-prov.geo.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null)
+    : fetch('/idn-prov.geo.json').then(r => r.ok ? r.json() : null).catch(() => null)
   ).then(gj => {
     if (!gj || !map || provBoundLayer) return;
     provBoundLayer = L.geoJSON(gj, {
@@ -11967,7 +11986,7 @@ function tvSnap(){
   tvPlace(x, r.top);
   tvSave();
 }
-function tvOpen(forceBottomLeft = false){
+function tvOpen(forceBottomLeft = false, deferPlay = false){
   if (tvOn) return;
   const w = $('#tvwrap');
   tvOn = true;
@@ -11987,7 +12006,23 @@ function tvOpen(forceBottomLeft = false){
   const defY = Math.max(6, innerHeight - hh - (mob ? 96 : footH + 104));
   if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) tvPlace(saved.x, saved.y);
   else tvPlace(mob ? 8 : 18, defY);
-  tvPlay();
+  if (deferPlay) {
+    tvPaint();
+    const body = $('#tv-body');
+    if (body) {
+      body.dataset.state = 'idle';
+      $('#tv-msg-t').textContent = 'LIVE TV SIAGA';
+      $('#tv-msg-s').textContent = 'Klik untuk putar · ' + TV_CH[tvIx].n;
+      if (!body.dataset.clickPlayBound) {
+        body.dataset.clickPlayBound = '1';
+        body.addEventListener('click', () => {
+          if (body.dataset.state === 'idle' && !tvHls) tvPlay();
+        });
+      }
+    }
+  } else {
+    tvPlay();
+  }
 }
 function tvClose(){
   if (!tvOn) return;
@@ -13324,10 +13359,9 @@ addEventListener('resize', () => {
   }, 60);
 });
 
-ensureHls().catch(() => {});
-if (!tvOn) tvOpen(true);
+if (!tvOn) tvOpen(true, true);
 
-(async () => {
+const bootApp = async () => {
   await detectApi();
   drawCityBar(); renderCams();
   renderAllQchips();
@@ -13339,7 +13373,12 @@ if (!tvOn) tvOpen(true);
   pullBreaking();
   if (layerOn.peringatan) trackBg(pullAlerts().catch(() => {}));
   refreshAll(false);
-})();
+};
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => { bootApp(); }, { once: true });
+} else {
+  bootApp();
+}
 </script>
 </body>
 </html>

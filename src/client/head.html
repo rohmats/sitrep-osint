@@ -10,23 +10,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..600&family=IBM+Plex+Mono:wght@400;500;600;700&family=Lexend:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" defer></script>
 <style>.leaflet-velocity { pointer-events: none !important; } .velocity-overlay, canvas.velocity-overlay { pointer-events: none !important; }</style>
 <script src="signals.js"></script>
 <script src="wxicons.js"></script>
 <script src="wire-core.js"></script>
 <script src="cctv-core.js"></script>
 <script>
-if (typeof HTMLCanvasElement !== 'undefined' && !HTMLCanvasElement.prototype._sitrepPatched) {
-  HTMLCanvasElement.prototype._sitrepPatched = true;
-  const _origGetCtx = HTMLCanvasElement.prototype.getContext;
-  HTMLCanvasElement.prototype.getContext = function(type, attribs) {
-    if (type === '2d') {
-      attribs = Object.assign({ willReadFrequently: true }, attribs);
-    }
-    return _origGetCtx.call(this, type, attribs);
-  };
-}
 const _extCssDone = new Set(), _extJsP = new Map();
 function loadExtCss(href) {
   if (_extCssDone.has(href) || document.querySelector('link[href="' + href + '"]')) { _extCssDone.add(href); return; }

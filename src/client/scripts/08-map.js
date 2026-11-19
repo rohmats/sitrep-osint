@@ -901,7 +901,7 @@ function ensureMap(){
   geoCtxLayer = L.layerGroup().addTo(map);
   (typeof globeProv !== 'undefined' && globeProv
     ? Promise.resolve(globeProv)
-    : fetch('/idn-prov.geo.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null)
+    : fetch('/idn-prov.geo.json').then(r => r.ok ? r.json() : null).catch(() => null)
   ).then(gj => {
     if (!gj || !map || provBoundLayer) return;
     provBoundLayer = L.geoJSON(gj, {

@@ -59,6 +59,7 @@
   position:relative;display:grid;grid-template-columns:40px minmax(0,1fr);gap:11px;
   padding:15px 14px 13px;background:#151515;border-bottom:1px solid #2a2a2a;
   transition:background .12s;
+  content-visibility:auto;contain-intrinsic-size:auto 140px;
 }
 .th:hover{background:#191919}
 .th-av{

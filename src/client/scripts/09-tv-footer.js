@@ -209,7 +209,7 @@ function tvSnap(){
   tvPlace(x, r.top);
   tvSave();
 }
-function tvOpen(forceBottomLeft = false){
+function tvOpen(forceBottomLeft = false, deferPlay = false){
   if (tvOn) return;
   const w = $('#tvwrap');
   tvOn = true;
@@ -229,7 +229,23 @@ function tvOpen(forceBottomLeft = false){
   const defY = Math.max(6, innerHeight - hh - (mob ? 96 : footH + 104));
   if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) tvPlace(saved.x, saved.y);
   else tvPlace(mob ? 8 : 18, defY);
-  tvPlay();
+  if (deferPlay) {
+    tvPaint();
+    const body = $('#tv-body');
+    if (body) {
+      body.dataset.state = 'idle';
+      $('#tv-msg-t').textContent = 'LIVE TV SIAGA';
+      $('#tv-msg-s').textContent = 'Klik untuk putar · ' + TV_CH[tvIx].n;
+      if (!body.dataset.clickPlayBound) {
+        body.dataset.clickPlayBound = '1';
+        body.addEventListener('click', () => {
+          if (body.dataset.state === 'idle' && !tvHls) tvPlay();
+        });
+      }
+    }
+  } else {
+    tvPlay();
+  }
 }
 function tvClose(){
   if (!tvOn) return;

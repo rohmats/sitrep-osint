@@ -209,6 +209,7 @@
 .tw{
   position:relative;display:grid;grid-template-columns:40px minmax(0,1fr);gap:12px;
   padding:15px 14px 13px;border-bottom:1px solid var(--border);transition:background .12s;
+  content-visibility:auto;contain-intrinsic-size:auto 140px;
 }
 .tw:hover{background:#1b1b1b}
 
@@ -329,6 +330,7 @@
 }
 #nlist{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)}
 #nlist>.nw-day,#nlist>.empty{grid-column:1/-1}
+#nlist>*:not(.nw-day):not(.empty){content-visibility:auto;contain-intrinsic-size:auto 96px}
 .nw-full{grid-column:1/-1}
 
 .nw-sk-line{display:block;height:9px;border-radius:2px;background:linear-gradient(90deg,#191919 20%,#292929 48%,#191919 76%);background-size:220% 100%;animation:nw-shimmer 1.35s ease-in-out infinite}

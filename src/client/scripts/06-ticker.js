@@ -120,33 +120,51 @@ function buildTicker(force){
     }
     if (!matched) tkX = ((tkX % setW) + setW) % setW;
     tickTrack.style.transform = 'translate3d(' + (-tkX).toFixed(2) + 'px,0,0)';
+    if (typeof wakeTicker === 'function') wakeTicker();
   }
 }
 
-let tkX = 0, tkSetW = 0, tkLast = 0, tkHold = false, tkVel = TICK_PX_S;
+let tkX = 0, tkSetW = 0, tkLast = 0, tkHold = false, tkVel = TICK_PX_S, tkRaf = 0;
+const tkReduceMq = matchMedia('(prefers-reduced-motion:reduce)');
+function tkCanRun() {
+  return !document.hidden && !tkHold && !tkReduceMq.matches && tkSetW > 0 && breakItems.length > 0;
+}
+function wakeTicker() {
+  if (!tkRaf && tkCanRun()) {
+    tkLast = 0;
+    tkRaf = requestAnimationFrame(tkFrame);
+  }
+}
 function tkFrame(t) {
+  tkRaf = 0;
+  if (!breakItems.length || tkSetW <= 0) {
+    tickTrack.style.transform = '';
+    return;
+  }
+  if (document.hidden || tkReduceMq.matches) return;
   const dt = tkLast ? Math.min(t - tkLast, 100) / 1000 : 0;
   tkLast = t;
-  if (tkSetW > 0 && breakItems.length) {
-    const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
-    const targetVel = (tkHold || reduce) ? 0 : TICK_PX_S;
-    tkVel += (targetVel - tkVel) * Math.min(1, dt * 12);
-    if (tkVel > 0.05) tkX += tkVel * dt;
+  const targetVel = tkHold ? 0 : TICK_PX_S;
+  tkVel += (targetVel - tkVel) * Math.min(1, dt * 12);
+  if (tkVel > 0.05) {
+    tkX += tkVel * dt;
     if (tkX >= tkSetW) tkX %= tkSetW;
     tickTrack.style.transform = 'translate3d(' + (-tkX).toFixed(2) + 'px,0,0)';
-  } else tickTrack.style.transform = '';
-  requestAnimationFrame(tkFrame);
+  }
+  if (!tkHold || tkVel > 0.1) tkRaf = requestAnimationFrame(tkFrame);
 }
-requestAnimationFrame(tkFrame);
+wakeTicker();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) wakeTicker(); });
+if (tkReduceMq.addEventListener) tkReduceMq.addEventListener('change', () => { if (!tkReduceMq.matches) wakeTicker(); });
 {
 
   const vpEl = $('.tk-vp');
   if (vpEl && matchMedia('(hover:hover)').matches) {
     vpEl.addEventListener('mouseenter', () => { tkHold = true; });
-    vpEl.addEventListener('mouseleave', () => { tkHold = false; });
+    vpEl.addEventListener('mouseleave', () => { tkHold = false; wakeTicker(); });
     vpEl.addEventListener('focusin', () => { tkHold = true; });
     vpEl.addEventListener('focusout', e => {
-      if (!vpEl.contains(e.relatedTarget)) tkHold = false;
+      if (!vpEl.contains(e.relatedTarget)) { tkHold = false; wakeTicker(); }
     });
   }
 }

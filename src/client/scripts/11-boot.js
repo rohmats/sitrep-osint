@@ -71,10 +71,9 @@ addEventListener('resize', () => {
   }, 60);
 });
 
-ensureHls().catch(() => {});
-if (!tvOn) tvOpen(true);
+if (!tvOn) tvOpen(true, true);
 
-(async () => {
+const bootApp = async () => {
   await detectApi();
   drawCityBar(); renderCams();
   renderAllQchips();
@@ -86,4 +85,9 @@ if (!tvOn) tvOpen(true);
   pullBreaking();
   if (layerOn.peringatan) trackBg(pullAlerts().catch(() => {}));
   refreshAll(false);
-})();
+};
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => { bootApp(); }, { once: true });
+} else {
+  bootApp();
+}
