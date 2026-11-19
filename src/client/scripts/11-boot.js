@@ -71,7 +71,7 @@ addEventListener('resize', () => {
   }, 60);
 });
 
-if (!tvOn) tvOpen(true, true);
+if (!tvOn) tvOpen(true);
 
 const bootApp = async () => {
   await detectApi();

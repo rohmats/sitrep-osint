@@ -1327,12 +1327,24 @@ function drawCdCities(){
     `</button>`;
   }).join('');
 }
-const CD_SNAP_CONC = 4;
+const CD_SNAP_CONC = 4, CD_LIVE_CAP = 6;
 let cdPageLimit = 24, cdTotalVisible = 0, cdVio = null, cdSnapActive = 0;
-const cdVisSet = new Set();
+const cdVisSet = new Set(), cdLiveMap = new Map();
+
+function cdStopLive(cell){
+  const st = cdLiveMap.get(cell);
+  if (!st) return;
+  cdLiveMap.delete(cell);
+  clearTimeout(st.tm);
+  if (st.h && st.h !== 'native') { try { st.h.destroy(); } catch (e) {} }
+  const v = vid(cell);
+  if (v) { cleanVid(v); v.remove(); }
+  cell.classList.remove('is-playing');
+}
 
 function cdClearObservers(){
   if (cdVio) { try { cdVio.disconnect(); } catch (e) {} }
+  for (const cell of [...cdLiveMap.keys()]) cdStopLive(cell);
   cdVisSet.clear();
   cdSnapActive = 0;
 }
@@ -1342,6 +1354,75 @@ function cdSetBadge(cell, cls, text){
   if (!b) return;
   b.className = 'badge ' + cls;
   b.textContent = text;
+}
+
+function cdStartLive(cell, c){
+  if (!cdOpen || cdLiveMap.has(cell) || cell.classList.contains('is-offline')) return;
+  const isYt = /youtube\.com\/embed\//i.test(c.e || '');
+  if (isYt || isDirectSnapFeed(c.s, c)) return;
+  const fr = cell.querySelector('.frame');
+  if (!fr) return;
+  const steps = camSteps(c);
+  if (!steps || !steps.length) return;
+  const host = CctvCore.hostOf(c.s);
+  const st = { h: null, step: hostMode.get(host) === 'proxy' ? Math.max(0, proxyIdx(steps)) : 0, tm: 0, nerr: 0, merr: 0 };
+  cdLiveMap.set(cell, st);
+  const v = mkVid(cell);
+  v.muted = true;
+  const onOk = () => {
+    if (!cdLiveMap.has(cell)) return;
+    clearTimeout(st.tm);
+    cell.classList.add('is-playing');
+    cdSetBadge(cell, 'live', 'Live');
+  };
+  v.onplaying = onOk;
+  v.onloadeddata = onOk;
+
+  const tryStep = () => {
+    if (!cdOpen || !cdLiveMap.has(cell)) return;
+    const url = steps[Math.min(st.step, steps.length - 1)];
+    if (!url) { cdStopLive(cell); return; }
+    clearTimeout(st.tm);
+    if (st.h && st.h !== 'native') { try { st.h.destroy(); } catch (e) {} st.h = null; }
+    if (/\.mp4($|\?)/i.test(url)) {
+      st.h = 'native';
+      v.src = url;
+      st.tm = setTimeout(() => {
+        if (!cell.classList.contains('is-playing') && ++st.step < steps.length) tryStep();
+        else if (!cell.classList.contains('is-playing')) cdStopLive(cell);
+      }, 9000);
+      v.onerror = () => { if (++st.step < steps.length) tryStep(); else cdStopLive(cell); };
+      v.play().catch(() => {});
+    } else if (needHlsLib(v)) {
+      ensureHls().then(() => { if (cdLiveMap.has(cell)) tryStep(); }).catch(() => cdStopLive(cell));
+    } else if (window.Hls && Hls.isSupported()) {
+      const h = new Hls(hlsJak({
+        startLevel: 0, capLevelToPlayerSize: true,
+        maxBufferLength: 6, maxMaxBufferLength: 12, backBufferLength: 4, liveBackBufferLength: 4,
+        liveSyncDurationCount: 2, liveMaxLatencyDurationCount: 5, liveDurationInfinity: true, maxLiveSyncPlaybackRate: 1.15,
+        manifestLoadingTimeOut: 20000, levelLoadingTimeOut: 20000, fragLoadingTimeOut: 20000,
+        manifestLoadingMaxRetry: 1, levelLoadingMaxRetry: 1, fragLoadingMaxRetry: 2
+      }));
+      st.h = h;
+      h.loadSource(url);
+      h.attachMedia(v);
+      h.on(Hls.Events.MANIFEST_PARSED, () => v.play().catch(() => {}));
+      h.on(Hls.Events.ERROR, (ev, d) => {
+        if (!d || !d.fatal || !cdLiveMap.has(cell)) return;
+        if (d.type === Hls.ErrorTypes.NETWORK_ERROR && ++st.nerr < 2) { h.startLoad(); return; }
+        if (d.type === Hls.ErrorTypes.MEDIA_ERROR && ++st.merr < 2) { h.recoverMediaError(); return; }
+        if (++st.step < steps.length) tryStep();
+        else cdStopLive(cell);
+      });
+    } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+      st.h = 'native';
+      v.src = url;
+      v.play().catch(() => {});
+    } else {
+      cdStopLive(cell);
+    }
+  };
+  tryStep();
 }
 
 function cdLoadSnap(cell){
@@ -1358,7 +1439,7 @@ function cdLoadSnap(cell){
   const directSnap = Boolean(c.snap && (/^https?:\/\/i\.ytimg\.com\//i.test(c.snap) || /(^|\.)dsdajakarta\.id/i.test(c.snap) || /SourceEndpoint\.video/i.test(c.snap)));
   const canSnap = Boolean(c.snap || (camSnapOK && API != null && !isYt));
   if (!canSnap) {
-    cdSetBadge(cell, 'wait', 'Siaga');
+    if (!cell.classList.contains('is-playing')) cdSetBadge(cell, 'wait', 'Memuat');
     return false;
   }
   const useProxy = cell.dataset.cdProxy === '1';
@@ -1371,7 +1452,7 @@ function cdLoadSnap(cell){
     if (!directSnap && cdSnapActive > 0) cdSnapActive--;
     if (ok) {
       cell.dataset.cdLoaded = '1';
-      cdSetBadge(cell, 'live', isYt ? 'YouTube' : 'Snapshot');
+      if (!cell.classList.contains('is-playing')) cdSetBadge(cell, 'live', isYt ? 'YouTube' : 'Snapshot');
       cdPumpSnaps();
       return;
     }
@@ -1380,10 +1461,9 @@ function cdLoadSnap(cell){
     if (!useProxy && c.snap && API != null) {
       cell.dataset.cdProxy = '1';
       setTimeout(() => { if (cdOpen && cdVisSet.has(cell)) cdPumpSnaps(); }, 300);
-    } else if (tries <= 3) {
-      cdSetBadge(cell, 'buf', 'Ulang…');
-      setTimeout(() => { if (cdOpen && cdVisSet.has(cell)) cdPumpSnaps(); }, 3000 * tries);
-    } else {
+    } else if (tries <= 2) {
+      setTimeout(() => { if (cdOpen && cdVisSet.has(cell)) cdPumpSnaps(); }, 3500 * tries);
+    } else if (!cell.classList.contains('is-playing') && !cdLiveMap.has(cell)) {
       cdSetBadge(cell, 'wait', 'Siaga');
     }
     cdPumpSnaps();
@@ -1396,12 +1476,18 @@ function cdLoadSnap(cell){
 
 function cdPumpSnaps(){
   if (!cdOpen || document.hidden) return;
+  for (const cell of [...cdLiveMap.keys()]) {
+    if (!cell.isConnected || !cdVisSet.has(cell)) cdStopLive(cell);
+  }
   for (const cell of cdVisSet) {
     if (!cell.isConnected) { cdVisSet.delete(cell); continue; }
-    if (cell.dataset.cdLoaded === '1' || cell.dataset.cdLoading === '1') continue;
     const idx = parseInt(cell.dataset.cdi, 10);
     const c = Number.isFinite(idx) ? cdList[idx] : null;
     if (!c || cell.classList.contains('is-offline')) continue;
+    if (cdLiveMap.size < CD_LIVE_CAP && !cdLiveMap.has(cell)) {
+      cdStartLive(cell, c);
+    }
+    if (cell.dataset.cdLoaded === '1' || cell.dataset.cdLoading === '1') continue;
     const isDirectYt = Boolean(c.snap && /^https?:\/\/i\.ytimg\.com\//i.test(c.snap));
     if (!isDirectYt && cdSnapActive >= CD_SNAP_CONC) continue;
     cdLoadSnap(cell);
@@ -1415,7 +1501,7 @@ function cdInitVio(){
   cdVio = new IntersectionObserver(entries => {
     for (const ent of entries) {
       if (ent.isIntersecting) cdVisSet.add(ent.target);
-      else cdVisSet.delete(ent.target);
+      else { cdVisSet.delete(ent.target); cdStopLive(ent.target); }
     }
     cdPumpSnaps();
   }, { root, rootMargin: '160px 0px', threshold: 0.01 });
