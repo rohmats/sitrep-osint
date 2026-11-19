@@ -9432,19 +9432,20 @@ function cdLoadSnap(cell){
   const c = Number.isFinite(idx) ? cdList[idx] : null;
   const im = cell.querySelector('img.snap');
   if (!c || !im || cell.dataset.cdLoaded === '1' || cell.dataset.cdLoading === '1') return false;
-  if (c.e && !c.snap) {
+  const isYt = /youtube\.com\/embed\//i.test(c.e || '');
+  if (isYt && !c.snap) {
     cdSetBadge(cell, 'live', 'YouTube');
     cell.dataset.cdLoaded = '1';
     return false;
   }
   const directSnap = Boolean(c.snap && (/^https?:\/\/i\.ytimg\.com\//i.test(c.snap) || /(^|\.)dsdajakarta\.id/i.test(c.snap) || /SourceEndpoint\.video/i.test(c.snap)));
-  const canSnap = Boolean(c.snap || (camSnapOK && API != null && !c.e));
+  const canSnap = Boolean(c.snap || (camSnapOK && API != null && !isYt));
   if (!canSnap) {
     cdSetBadge(cell, 'wait', 'Siaga');
     return false;
   }
   const useProxy = cell.dataset.cdProxy === '1';
-  const url = snapUrlFor(c, useProxy);
+  const url = snapUrl(c, useProxy);
   if (!url) return false;
   cell.dataset.cdLoading = '1';
   if (!directSnap) cdSnapActive++;
@@ -9453,7 +9454,7 @@ function cdLoadSnap(cell){
     if (!directSnap && cdSnapActive > 0) cdSnapActive--;
     if (ok) {
       cell.dataset.cdLoaded = '1';
-      cdSetBadge(cell, 'live', c.e ? 'YouTube' : 'Snapshot');
+      cdSetBadge(cell, 'live', isYt ? 'YouTube' : 'Snapshot');
       cdPumpSnaps();
       return;
     }
